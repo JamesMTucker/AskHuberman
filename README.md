@@ -1,5 +1,8 @@
 # Ask Huberman
 
+<img src="https://hubermanlab.com/wp-content/uploads/2021/05/Huberman-Lab-Podcast-Intro-1920x1080-1-1080x608.jpeg">
+
+
 ## Description
 
 Dr. Andrew Huberman is a neuroscientist at Stanford University. He has a YouTube channel where he posts educational videos about neuroscience. This repo contains machine learning code that analyzes Andrew Huberman's public facing scientific education materials. The code contained herein is not endorsed by Dr. Huberman, Stanford University, or any other entity.
