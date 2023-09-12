@@ -55,8 +55,7 @@ class Huberman:
         # inside the article-wrapper col, there is an 'article class' which contains the url
         episodes = [episode.find("article") for episode in episodes_wrapper]
         return [episode.find("a")["href"] for episode in episodes]
-    
-    
+       
     def get_urls(self):
         """The webpage doesn't load all the episodes at once, so we need to scroll down to load more episodes."""
         # use selenium to scroll down the page
@@ -159,6 +158,25 @@ class Huberman:
         
         return df
 
+def _save_csv(df: pd.DataFrame, path: str):
+    """Save the dataframe to a csv file."""
+    logger.info(f"Saving data to {path}")
+    
+    # change the video description to semi-colon separated string
+    df.records['video_description'] = df.records['video_description'].apply(lambda x: ' '.join(x) if x is not None else None)
+    
+    # change video resources to semi-colon separated string
+    df.records['video_resources'] = df.records['video_resources'].apply(lambda x: '; '.join(x) if x is not None else None)
+    
+    # change timestamps to semi-colon separated string
+    df.records['timestamps'] = df.records['timestamps'].apply(lambda x: '; '.join(x) if x is not None else None)
+    
+    # change timestamp descriptions to semi-colon separated string
+    df.records['timestamp_descriptions'] = df.records['timestamp_descriptions'].apply(lambda x: '; '.join(x) if x is not None else None)
+    
+    # clean up for csv
+    df.records.to_csv(f'{path}/video_metadata.csv', sep=',', quotechar='"', index=False)
+
 
 def main():
     """Main function to control the Huberman Lab website to scrap the data for each episode.
@@ -174,21 +192,7 @@ def main():
         os.makedirs('data')
 
     # save the data
-    logger.info('Saving podcast metadata')
-    
-    # change the video description to semi-colon separated string
-    huberman.records['video_description'] = huberman.records['video_description'].apply(lambda x: '; '.join(x) if x is not None else None)
-    
-    # change video resources to semi-colon separated string
-    huberman.records['video_resources'] = huberman.records['video_resources'].apply(lambda x: '; '.join(x) if x is not None else None)
-    
-    # change timestamps to semi-colon separated string
-    huberman.records['timestamps'] = huberman.records['timestamps'].apply(lambda x: '; '.join(x) if x is not None else None)
-    
-    # change timestamp descriptions to semi-colon separated string
-    huberman.records['timestamp_descriptions'] = huberman.records['timestamp_descriptions'].apply(lambda x: '; '.join(x) if x is not None else None)
-    
-    huberman.records.to_csv("./data/video_metadata.csv", sep=',', quotechar='"', index=False)
+    _save_csv(huberman, './data')
     
     
 if __name__ == "__main__":
