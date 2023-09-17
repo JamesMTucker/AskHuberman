@@ -4,4 +4,4 @@ chromedriver-linux64
 chromedriver.zip
 
 # locals
-./sraper/config.py
+scraper/config.py
