@@ -2,7 +2,8 @@ all: create_env setup download_driver install_driver
 
 PHONY: create_env
 
-DRIVER_URL_LINUX = "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/116.0.5845.96/linux64/chromedriver-linux64.zip"
+VERSION = "117.0.5938.88"
+DRIVER_URL_LINUX = "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$(VERSION)/linux64/chromedriver-linux64.zip"
 DRIVER_NAME = "chromedriver.zip"
 VENV := .venv
 
@@ -10,7 +11,6 @@ create_env:
 	@echo "Creating virtual environment at $(PWD)/$(VENV)"
 	@python3 -m venv $(VENV)
 	@echo "Virtual environment created."
-
 
 setup: $(VENV)/bin/activate
 

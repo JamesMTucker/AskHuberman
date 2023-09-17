@@ -19,19 +19,20 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler())
 
+
 @dataclass
 class Huberman:
     url: str = "https://www.hubermanlab.com/"
     episodes: list = field(default_factory=list)
     episode_data: list[dict] = field(default_factory=list)
     driver: webdriver.Chrome = field(default_factory=webdriver.Chrome)
-    
+
     def __post_init__(self):
         """Initialize the class."""
         self.episodes = self.get_urls()
         self.episode_data = [self.get_episode_data(url) for url in tqdm(self.episodes, desc="Scraping Episodes")]
         self.records = self._build_dataframe(self.episodes, self.episode_data)
-        
+
     @staticmethod
     def _chrome_options(*, headless: bool = False, user_agent: str = None):
         """Define the chrome options."""
@@ -45,7 +46,7 @@ class Huberman:
         if headless:
             co.add_argument("--headless=new")
         return co
-    
+
     @staticmethod
     def _fetch_episode_urls(soup: BeautifulSoup):
         """Fetch the urls for each episode."""
@@ -55,7 +56,7 @@ class Huberman:
         # inside the article-wrapper col, there is an 'article class' which contains the url
         episodes = [episode.find("article") for episode in episodes_wrapper]
         return [episode.find("a")["href"] for episode in episodes]
-       
+
     def get_urls(self):
         """The webpage doesn't load all the episodes at once, so we need to scroll down to load more episodes."""
         # use selenium to scroll down the page
@@ -134,7 +135,7 @@ class Huberman:
             article['timestamp_descriptions'] = None
             
         return article
-        
+
     def _build_dataframe(self, episodes: list, episode_data: list[dict]) -> pd.DataFrame:
         """Construct the dataframe of the episode data"""
         
@@ -157,6 +158,7 @@ class Huberman:
                                 ]
         
         return df
+
 
 def _save_csv(df: pd.DataFrame, path: str):
     """Save the dataframe to a csv file."""
