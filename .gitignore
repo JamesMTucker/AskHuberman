@@ -2,3 +2,6 @@
 LICENSE.chromedriver
 chromedriver-linux64
 chromedriver.zip
+
+# locals
+./sraper/config.py
