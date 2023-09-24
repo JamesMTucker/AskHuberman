@@ -4,4 +4,8 @@ chromedriver-linux64
 chromedriver.zip
 
 # locals
-scraper/config.py
+config/local.env
+
+# virtual environment
+AskHuberman/bin/venv
+
