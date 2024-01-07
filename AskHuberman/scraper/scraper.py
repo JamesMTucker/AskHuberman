@@ -8,9 +8,10 @@ from dataclasses import field
 from pathlib import Path
 
 import bs4
+from fake_useragent.settings import metadata
 import pandas as pd
 import requests
-import selenium.common.exceptions
+from selenium.common.exceptions import TimeoutException
 from tqdm.auto import tqdm
 from bs4 import BeautifulSoup
 
@@ -30,16 +31,22 @@ logger.addHandler(logging.StreamHandler())
 class Huberman:
     base_url: str = "https://www.hubermanlab.com"
     url: str = f"{base_url}/all-episodes"
-    episodes: list = field(default_factory=list)
-    thumbnails: list = field(default_factory=list)
+    episodes_metadata: list = field(default_factory=list)
     episode_data: list[dict] = field(default_factory=list)
+    episodes_df: pd.DataFrame = field(default_factory=pd.DataFrame)
     driver: webdriver.Chrome = field(default_factory=webdriver.Chrome)
 
     def __post_init__(self):
         """Initialize the class."""
-        self.episodes = self.get_episode_meta_data()
-        self.episode_data = [self.get_episode_data(url) for url in tqdm(self.episodes, desc="Scraping Episodes")]
-        self.records = self._build_dataframe(self.episodes, self.episode_data)
+        self._get_episode_meta_data() # populate the episodes_metadata
+        # parse the data for each episode
+        episode_link = self.episodes_df.episode_link.tolist()
+        self.episode_data = [self._parse_episode_data(url) for url in tqdm(episode_link, desc="Scraping Episodes")]
+        # merge the self.episode_data onto the self.episodes_df
+        self.episodes_df['show_notes'] = self.episode_data
+        self.episodes_df.to_csv('huberman.csv', index=True)
+        exit()
+        self.records = self._build_dataframe(self.episodes_metadata, self.episode_data)
 
     @staticmethod
     def _chrome_options(*, headless: bool = False, user_agent: str = None):
@@ -65,7 +72,7 @@ class Huberman:
         episodes = [episode.find("article") for episode in episodes_wrapper]
         return [episode.find("a")["href"] for episode in episodes]
 
-    def get_episode_meta_data(self) -> list[str]:
+    def _get_episode_meta_data(self) -> list:
         """The webpage doesn't load all the episodes at once, so we need to scroll down to load more episodes."""
         # use selenium to scroll down the page
         self.driver.get(self.url)
@@ -80,7 +87,10 @@ class Huberman:
         page_number = 1
         # while the page exists, scroll down, scrape the data, and click on the next page
         while page_exists:
-            # scroll down to the bottom of the page
+            # progress through the pages to get all the episodes
+            next_button_element = '/html/body/main/section[2]/div/div[2]/div[3]/div[3]/div/ul/li[8]/a'
+          
+            # scroll down to the bottom of the page to populate the page with more episodes
             while True:
                 last_height = self.driver.execute_script("return document.body.scrollHeight")
                 self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -90,44 +100,28 @@ class Huberman:
                     break
                 last_height = new_height
 
-            next_button_element = '/html/body/main/section[2]/div/div[2]/div[3]/div[3]/div/ul/li[8]/a'
-            next_button = WebDriverWait(self.driver, 20).until(
-                EC.element_to_be_clickable((By.XPATH, next_button_element)))
+            # get the html source for current page
+            html = self.driver.page_source
+            logger.info(f'Processing page {page_number}')
 
-            # scrape the data on the current page
+            # parse the html
+            soup = BeautifulSoup(html, "html.parser")
+            self._parse_metadata(soup)
+
+            # paginate to the next page
             try:
-                next_button.click()
-                # get the html source for current page
-                html = self.driver.page_source
-
-                print(f'Processing page {page_number}')
-                soup = BeautifulSoup(html, "html.parser")
-
-                self.get_episode_data(soup)
-
+                next_button = WebDriverWait(self.driver, 20).until(
+                    EC.element_to_be_clickable((By.XPATH, next_button_element)))
+                # increase the page number
                 page_number += 1
+                next_button.click()
                 time.sleep(2)
-            except selenium.common.exceptions.TimeoutException:
-                print(f'Processed a total of {page_number} pages')
+            except TimeoutException:
+                logger.info(f'Processed a total of {page_number} pages')
                 page_exists = False
-
-        
-
-        # next_element = self.driver.find_element_by_xpath('//*[@id="pagination"]/div/ul/li[8]/a')
-        # next_element.click()
-        
-        exit()
-                
-                
-                
-                
-        urls = self._fetch_episode_urls(soup)
-        logger.info(f"Found {len(urls)} episodes")
-        self.driver.close()
-        
-        return urls
-
-    def get_episode_data(self, page_source: bs4.BeautifulSoup) -> dict:
+                break
+    
+    def _parse_metadata(self, page_source: bs4.BeautifulSoup) -> dict:
         """
         Scrape the metadata for each episode.
         :param page_source: The page source for the episode in an soup object.
@@ -158,56 +152,75 @@ class Huberman:
             episodes = li.find_all("li", {"class": "ais-Hits-item"})
 
             for episode in episodes:
+                # create an empty dataframe
+                df = pd.DataFrame()
+
+                # create an id for the episode
+                episode_id = uuid.uuid4()
+
                 # extract the episode link
                 episode_link = episode.find("a")['href']
 
                 # extract the img thumbnail and description from img alt
                 thumbnail = episode.find("img")['src']
-                description = episode.find("img")['alt']
+                title = episode.find("img")['alt']
+                description = episode.find("div", {"class": "description"}).text
 
                 # extract the episode category, date, and primary topic
                 category = episode.find("div", {"class": "hit"})['algolia-category']
                 date = episode.find("div", {"class": "hit"})['algolia-date']
+                # the primary topic is defined in the attribute
                 primary_topic = episode.find("div", {"class": "hit"})['algolia-primarytopic']
 
+                # we also want the other topics in the div class="topics-list"
+                topics_listed = episode.find("div", {"class": "topics-list"})
+                # extract the list of topics from the a href into a list
+                topics = [topic.text for topic in topics_listed.find_all("a")]
 
-                print(category, date, primary_topic, episode_link, thumbnail, description)
-
-            #     # grab the image thumbnail
-            #     thumbnail = episode.find("img")['src']
-            #     self.thumbnails.append(thumbnail)
-            #
-            #     # get the topics list from the div class="topics-list"
-            #     topics = episode.find("div", {"class": "topics-list"}).text
-            #
-            #     # the episode meta data is in a div class="hit-content"
-            #     hit_content = episode.find("div", {"class": "hit-content"})
-            #
-            #     # get the type of episode in the hit-category div
-            #     hit_category = hit_content.find("div", {"class": "hit-category"})
-            #
-            #     # get the episode description from the div class="description"
-            #     description = hit_content.find("div", {"class": "description"})
-            #
-            #     # episode links are in the href of the hit_content
-            #     episode_link = hit_content.find("a")['href']
-            #     print(f'{self.base_url}{episode_link}')
-
-        # print(episodes)
+                # grab the image thumbnail
+                thumbnail = episode.find("img")['src']
 
 
-    # def get_episode_data(self, url: str) -> dict:
-    #     """
-    #     Each episode is on a separate page, so we need to scrap the data from each page.
-    #
-    #     title = h1 class="entry-title"
-    #     entry_content = div class "entry-content" in the <p> tags
-    #     resources = any linked resources
-    #     timestamps = h2 class=wp-block-heading id="h-timestamps
-    #
-    #     """
-    #     article = {}
-    #
+                # add the data to the dictionary
+                episodes_meta_data[episode_id] = {
+                    "episode_link": episode_link,
+                    "thumbnail": thumbnail,
+                    "title": title,
+                    "description": description,
+                    "category": category,
+                    "date": date,
+                    "primary_topic": primary_topic,
+                    "topics": topics
+                }
+
+                # convert to a dataframe
+                df = pd.DataFrame.from_dict(episodes_meta_data, orient='index')
+                # append to class dataframe
+                self.episodes_df = pd.concat([self.episodes_df, df])
+
+                # append the episode link to the self.episode_meta_data list
+                self.episodes_metadata.append(episodes_meta_data)
+
+    def _parse_episode_data(self, episode: dict) -> dict:
+        """
+        Each episode is on a separate page, so we need to scrap the data from each page.
+
+        title = h1 class="entry-title"
+        entry_content = div class "entry-content" in the <p> tags
+        resources = any linked resources
+        timestamps = h2 class=wp-block-heading id="h-timestamps
+        """
+        # get the page source with chrome
+        logger.info(f"Processing episode {episode}")
+        page = requests.get(f"{self.base_url}{episode}")
+        print(page.status_code)
+        soup = BeautifulSoup(page.content, "lxml")
+        
+        # get the show notes in div class="rich-text-episode-notes w-richtext" (get content in p and li tags)
+        show_notes = soup.find("div", {"class": "rich-text-episode-notes w-richtext"}).find_all(["p", "li"])
+        show_notes = " ".join([note.text.strip() for note in show_notes])
+        self.episode_data.append(show_notes)
+
     #     # use requests to get the html
     #     page = requests.get(url)
     #     soup = BeautifulSoup(page.content, "lxml")
